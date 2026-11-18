@@ -40,7 +40,25 @@ if (isPng) {
   }
   console.log(`news-image-20261117: PNG ${width}x${height}, ${bytes.length} bytes`);
 } else {
-  console.log(`news-image-20261117: JPEG, ${bytes.length} bytes`);
+  // JPEG: walk the segments to the SOF0/SOF2 marker to read the frame size,
+  // so the 1024x1024 cap is enforced for JPEG entries too, not just PNG.
+  let offset = 2;
+  let dims: [number, number] | null = null;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) break;
+    const marker = bytes[offset + 1];
+    if (marker === 0xc0 || marker === 0xc2) {
+      dims = [bytes.readUInt16BE(offset + 7), bytes.readUInt16BE(offset + 5)];
+      break;
+    }
+    offset += 2 + bytes.readUInt16BE(offset + 2);
+  }
+  if (dims === null) throw new Error('entry.png: no JPEG frame header found');
+  const [width, height] = dims;
+  if (width > MAX_SIDE || height > MAX_SIDE) {
+    throw new Error(`entry.png is ${width}x${height}, over the 1024x1024 cap`);
+  }
+  console.log(`news-image-20261117: JPEG ${width}x${height}, ${bytes.length} bytes`);
 }
 
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
